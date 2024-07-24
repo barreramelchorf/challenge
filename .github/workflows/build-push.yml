@@ -39,3 +39,61 @@ jobs:
       - name: Set outputs
         id: vars
         run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+  deploy_review:
+    needs: [build-and-push]
+    name: Deploy ReviewApp
+    runs-on: ubuntu-latest
+    container:
+      image: pulumi:3.108.1
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        PULUMI_CONFIG_PASSPHRASE: 040696
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Deploy ReviewApp
+        run: |
+          IMAGE_TAG=${{ needs.build.outputs.sha_short }}
+          git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
+          cd /tmp/infrastructure          
+          aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
+          yarn --cache-folder=.yarn install
+          yarn --cache-folder=.yarn install --cwd cli-gcs
+          cd /tmp/infrastructure/applications/challenge
+          if [ ! -f "Pulumi.pr${{ github.event.pull_request.number }}.yaml" ]; then
+            cp Pulumi.$ENV.yaml Pulumi.pr${{ github.event.pull_request.number }}.yaml
+          fi
+          pulumi stack select -c pr${{ github.event.pull_request.number }} --secrets-provider=passphrase
+          pulumi config -s pr${{ github.event.pull_request.number }} set --path app.version "$IMAGE_TAG"
+          pulumi config -s pr${{ github.event.pull_request.number }} set --path app.reviewApp.pr "${{ github.event.pull_request.number }}"
+          git add Pulumi.pr${{ github.event.pull_request.number }}.yaml
+          git commit -am "[ci skip] feat: deploy challenge for PR # ${{ github.event.pull_request.number }} in $ENV" || true
+          git pull --rebase && git push --force-with-lease || true
+          cd /tmp/infrastructure
+          cli-gcs/bin/run deploy:reviewApp challenge ${{ github.event.pull_request.number }}
+        env:
+          ENV: staging
+      - name: Find Comment Decorator
+        uses: peter-evans/find-comment@v2
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: ReviewApp created
+      - name: Create Comment Decorator
+        if: steps.fc.outputs.comment-id == ''
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ReviewApp created: https://challenge-${{ github.event.pull_request.number }}.reviewapps.barreramelchorf.top
+          reactions: rocket
+      - name: Update comment
+        if: steps.fc.outputs.comment-id != ''
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            (Updated) ReviewApp created: https://challenge-${{ github.event.pull_request.number }}.reviewapps.barreramelchorf.top
+          reactions: hooray
