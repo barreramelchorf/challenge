@@ -80,7 +80,7 @@ jobs:
           cli-gcs/bin/run deploy:reviewApp challenge ${{ github.event.pull_request.number }}
         env:
           ENV: staging
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Find Comment Decorator
         uses: peter-evans/find-comment@v2
         id: fc
