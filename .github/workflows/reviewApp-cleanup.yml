@@ -1,0 +1,48 @@
+name: Cleanup reviewapp 
+on:
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  cleanup_review:
+    name: Cleanup ReviewApp
+    runs-on: ubuntu-latest
+    container:
+      image: public.ecr.aws/pulumi/pulumi:3.108.1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: barreramelchorf/infrastructure
+          token: ${{ secrets.GH_TOKEN }}
+          path: infrastructure
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Cleanup ReviewApp
+        run: |
+          export PULUMI_CONFIG_PASSPHRASE=040696
+          git config user.email "barreramelchorf@gmail.com"
+          git config user.name "Fernando Barrera"
+          cd infrastructure        
+          aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
+          yarn --cache-folder=.yarn install
+          yarn --cache-folder=.yarn install --cwd cli
+          cd /tmp/infrastructure/applications/challenge
+          pulumi stack select -c pr${{ github.event.pull_request.number }} --secrets-provider=passphrase
+          pulumi destroy -s pr${{ github.event.pull_request.number }} --yes
+          pulumi stack rm -s pr${{ github.event.pull_request.number }} --yes
+          git rm Pulumi.pr${{ github.event.pull_request.number }}.yaml || true
+          git commit -am "[ci skip] feat: remove deployment challenge for PR # ${{ github.event.pull_request.number }} in $ENV" || true
+          git pull --rebase && git push --force-with-lease || true
+        env:
+          ENV: staging
