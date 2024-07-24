@@ -1,0 +1,73 @@
+name: Kubernetes deployment
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: barreramelchorf/infrastructure
+          token: ${{ secrets.GH_TOKEN }}
+          path: infrastructure
+
+      - name: Update PATH
+        run: export PATH=$PATH:$HOME/.local/bin
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Image
+        run: ./ci-scripts/build.sh
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+
+      - name: Set outputs
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
+  deploy:
+    needs: [build]
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    container:
+      image: public.ecr.aws/pulumi/pulumi:3.108.1
+    steps:
+      - name: Deploy
+        run: |
+          IMAGE_TAG=${{ needs.build.outputs.sha_short }}
+          export PULUMI_CONFIG_PASSPHRASE=040696
+          cd infrastructure          
+          aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
+          yarn --cache-folder=.yarn install
+          yarn --cache-folder=.yarn install --cwd cli-gcs
+          cd applications/challenge
+          git config user.email "barreramelchorf@gmail.com"
+          git config user.name "Fernando Barrera"
+          pulumi config -s $ENV set --path app.version "$IMAGE_TAG"
+          pulumi config -s $ENV set --path app.migrationsVersion "$IMAGE_TAG"
+          git commit -am "[ci skip] feat: update challenge in $ENV to $IMAGE_TAG" || true
+          git pull --rebase && git push --force-with-lease || true
+          cd ../../
+          cli-gcs/bin/run deploy:app challenge $ENV
+        env:
+          ENV: staging

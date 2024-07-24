@@ -1,0 +1,154 @@
+name: Create reviewapp
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: ~
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pylint
+
+      - name: Run linter
+        run: pylint counters
+        continue-on-error: true
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker Compose services
+        run: docker-compose -f docker-compose.yml build
+
+      - name: Run tests
+        run: docker-compose -f docker-compose.yml run --rm django bash -c "time DJANGO_ENV=testing python manage.py test"
+        continue-on-error: true  # Allow tests to fail
+
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update PATH
+        run: export PATH=$PATH:$HOME/.local/bin
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Image
+        run: ./ci-scripts/build.sh
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+      - name: Set outputs
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
+  deploy_review:
+    needs: [build-and-push]
+    name: Deploy ReviewApp
+    runs-on: ubuntu-latest
+    container:
+      image: public.ecr.aws/pulumi/pulumi:3.108.1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: barreramelchorf/infrastructure
+          token: ${{ secrets.GH_TOKEN }}
+          path: infrastructure
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy ReviewApp
+        run: |
+          IMAGE_TAG=${{ needs.build-and-push.outputs.sha_short }}
+          export PULUMI_CONFIG_PASSPHRASE=040696
+          cd infrastructure          
+          aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
+          yarn --cache-folder=.yarn install
+          yarn --cache-folder=.yarn install --cwd cli-gcs
+          cd applications/challenge
+          git config user.email "barreramelchorf@gmail.com"
+          git config user.name "Fernando Barrera"
+          if [ ! -f "Pulumi.pr${{ github.event.pull_request.number }}.yaml" ]; then
+            cp Pulumi.$ENV.yaml Pulumi.pr${{ github.event.pull_request.number }}.yaml
+          fi
+          pulumi login s3://barreramelchorf-pulumi-state
+          pulumi stack select -c pr${{ github.event.pull_request.number }} --secrets-provider=passphrase
+          pulumi config -s pr${{ github.event.pull_request.number }} set --path app.version "$IMAGE_TAG"
+          pulumi config -s pr${{ github.event.pull_request.number }} set --path app.reviewApp.pr "${{ github.event.pull_request.number }}"
+          git add Pulumi.pr${{ github.event.pull_request.number }}.yaml
+          git commit -am "[ci skip] feat: deploy challenge for PR # ${{ github.event.pull_request.number }} in $ENV" || true
+          git pull --rebase && git push --force-with-lease || true
+          cd ../../
+          cli-gcs/bin/run deploy:reviewApp challenge ${{ github.event.pull_request.number }}
+        env:
+          ENV: staging
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find Comment Decorator
+        uses: peter-evans/find-comment@v2
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: ReviewApp created
+      - name: Create Comment Decorator
+        if: steps.fc.outputs.comment-id == ''
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ReviewApp created: https://challenge-${{ github.event.pull_request.number }}.reviewapps.barreramelchorf.top
+          reactions: rocket
+      - name: Update comment
+        if: steps.fc.outputs.comment-id != ''
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            (Updated) ReviewApp created: https://challenge-${{ github.event.pull_request.number }}.reviewapps.barreramelchorf.top
+          reactions: hooray
