@@ -59,7 +59,7 @@ jobs:
       - name: Deploy ReviewApp
         run: |
           IMAGE_TAG=${{ needs.build.outputs.sha_short }}
-          PULUMI_CONFIG_PASSPHRASE=040696
+          export PULUMI_CONFIG_PASSPHRASE=040696
           git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
           cd /tmp/infrastructure          
           aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
