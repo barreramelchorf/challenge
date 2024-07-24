@@ -55,7 +55,7 @@ jobs:
       - name: Checkout source repository
         uses: actions/checkout@v2
         with:
-          repository: barreramelchorf/infrastructure
+          repository: source-repo-owner/source-repo-name
           token: ${{ secrets.GITHUB_TOKEN }}
           path: source
 
@@ -66,26 +66,29 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Clone target repository
+        run: |
+          git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
+          
+      - name: Copy files to target repository
+        run: |
+          cp -r source/* /tmp/infrastructure/
+          cp -r . /tmp/infrastructure/ --exclude .git --exclude source --exclude /tmp/infrastructure
+
+      - name: Configure and push changes
+        run: |
+          cd /tmp/infrastructure
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update from source and current repository" || echo "No changes to commit"
+          git push https://barreramelchorf:${{ secrets.TARGET_REPO_PAT }}@github.com/barreramelchorf/infrastructure.git
+
       - name: Deploy ReviewApp
         run: |
           IMAGE_TAG=${{ needs.build-and-push.outputs.sha_short }}
           export PULUMI_CONFIG_PASSPHRASE=040696
           
-          # Clone target repository
-          git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
-          
-          # Sync files from source and current repo to target repo
-          rsync -av --delete source/ /tmp/infrastructure/
-          rsync -av --delete . /tmp/infrastructure/ --exclude .git --exclude source --exclude /tmp/infrastructure
-
-          # Configure and push changes to the target repository
-          cd /tmp/infrastructure
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Update from source and current repository"
-          git push https://barreramelchorf:${{ secrets.TARGET_REPO_PAT }}@github.com/barreramelchorf/infrastructure.git
-
           # Continue with existing deploy steps
           aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
           yarn --cache-folder=.yarn install
