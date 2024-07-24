@@ -47,9 +47,7 @@ jobs:
       image: public.ecr.aws/pulumi/pulumi:3.108.1
     steps:
       - name: Checkout current repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}        
+        uses: actions/checkout@v4    
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -62,14 +60,15 @@ jobs:
         run: |
           IMAGE_TAG=${{ needs.build-and-push.outputs.sha_short }}
           export PULUMI_CONFIG_PASSPHRASE=040696
-          git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
-          cd /tmp/infrastructure          
+          git clone https://barreramelchorf:$GITHUB_TOKEN@github.com/barreramelchorf/infrastructure /tmp/infrastructure
+          cd /tmp/infrastructure     
+          git config user.name "Fernando Barrera Melchor"
+          git config user.email "barreramelchorf@gmail.com"
+          git config --unset-all http.https://github.com/.extraheader
           aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
           yarn --cache-folder=.yarn install
           yarn --cache-folder=.yarn install --cwd cli-gcs
           cd /tmp/infrastructure/applications/challenge
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ ! -f "Pulumi.pr${{ github.event.pull_request.number }}.yaml" ]; then
             cp Pulumi.$ENV.yaml Pulumi.pr${{ github.event.pull_request.number }}.yaml
           fi
