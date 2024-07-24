@@ -64,6 +64,7 @@ jobs:
           if [ ! -f "Pulumi.pr${{ github.event.pull_request.number }}.yaml" ]; then
             cp Pulumi.$ENV.yaml Pulumi.pr${{ github.event.pull_request.number }}.yaml
           fi
+          pulumi login s3://barreramelchorf-pulumi-state
           pulumi stack select -c pr${{ github.event.pull_request.number }} --secrets-provider=passphrase
           pulumi config -s pr${{ github.event.pull_request.number }} set --path app.version "$IMAGE_TAG"
           pulumi config -s pr${{ github.event.pull_request.number }} set --path app.reviewApp.pr "${{ github.event.pull_request.number }}"
