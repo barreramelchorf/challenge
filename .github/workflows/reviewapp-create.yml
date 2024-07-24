@@ -47,10 +47,11 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Run migrations
+        run: python manage.py migrate
+  
       - name: Run tests
-        run: |
-          python manage.py migrate
-          pytest
+        run: python manage.py test
 
   build-and-push:
     runs-on: ubuntu-latest
