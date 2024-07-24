@@ -14,13 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Checkout infra repository
-        uses: actions/checkout@v4
-        with:
-          repository: barreramelchorf/infrastructure
-          token: ${{ secrets.GH_TOKEN }}
-          path: infrastructure
-
       - name: Update PATH
         run: export PATH=$PATH:$HOME/.local/bin
 
@@ -52,6 +45,23 @@ jobs:
     container:
       image: public.ecr.aws/pulumi/pulumi:3.108.1
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: barreramelchorf/infrastructure
+          token: ${{ secrets.GH_TOKEN }}
+          path: infrastructure
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
       - name: Deploy
         run: |
           IMAGE_TAG=${{ needs.build.outputs.sha_short }}

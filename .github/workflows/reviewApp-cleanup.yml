@@ -31,13 +31,13 @@ jobs:
       - name: Cleanup ReviewApp
         run: |
           export PULUMI_CONFIG_PASSPHRASE=040696
-          git config user.email "barreramelchorf@gmail.com"
-          git config user.name "Fernando Barrera"
-          cd infrastructure        
+          cd infrastructure          
           aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
           yarn --cache-folder=.yarn install
-          yarn --cache-folder=.yarn install --cwd cli
-          cd /tmp/infrastructure/applications/challenge
+          yarn --cache-folder=.yarn install --cwd cli-gcs
+          cd applications/challenge
+          git config user.email "barreramelchorf@gmail.com"
+          git config user.name "Fernando Barrera"
           pulumi stack select -c pr${{ github.event.pull_request.number }} --secrets-provider=passphrase
           pulumi destroy -s pr${{ github.event.pull_request.number }} --yes
           pulumi stack rm -s pr${{ github.event.pull_request.number }} --yes
