@@ -69,13 +69,21 @@ jobs:
       - name: Clone target repository
         run: |
           git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
-          
-      - name: Copy files to target repository
-        run: |
-          cp -r source/* /tmp/infrastructure/
-          cp -r . /tmp/infrastructure/ --exclude .git --exclude source --exclude /tmp/infrastructure
+          cd /tmp/infrastructure
+          git checkout -b temp-branch
 
-      - name: Configure and push changes
+      - name: Merge repositories
+        run: |
+          cd /tmp/infrastructure
+          git remote add current-repo https://github.com/${{ github.repository }}.git
+          git fetch current-repo
+          git checkout -b temp-branch
+          git merge current-repo/main --allow-unrelated-histories
+          git remote add source-repo https://github.com/barreramelchorf/infrastructure.git
+          git fetch source-repo
+          git merge source-repo/main --allow-unrelated-histories
+
+      - name: Push merged changes to target repository
         run: |
           cd /tmp/infrastructure
           git config user.name "github-actions[bot]"
