@@ -73,6 +73,7 @@ jobs:
           cd applications/challenge
           git config user.email "barreramelchorf@gmail.com"
           git config user.name "Fernando Barrera"
+          pulumi login s3://barreramelchorf-pulumi-state
           pulumi config -s $ENV set --path app.version "$IMAGE_TAG"
           pulumi config -s $ENV set --path app.migrationsVersion "$IMAGE_TAG"
           git commit -am "[ci skip] feat: update challenge in $ENV to $IMAGE_TAG" || true

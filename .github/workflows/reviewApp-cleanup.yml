@@ -38,6 +38,7 @@ jobs:
           cd applications/challenge
           git config user.email "barreramelchorf@gmail.com"
           git config user.name "Fernando Barrera"
+          pulumi login s3://barreramelchorf-pulumi-state
           pulumi stack select -c pr${{ github.event.pull_request.number }} --secrets-provider=passphrase
           pulumi destroy -s pr${{ github.event.pull_request.number }} --yes
           pulumi stack rm -s pr${{ github.event.pull_request.number }} --yes
