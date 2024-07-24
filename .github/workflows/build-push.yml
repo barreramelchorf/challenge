@@ -4,20 +4,38 @@ on:
   push:
     branches:
       - main
+  pull_request: ~
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+      
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Update PATH
+        run: export PATH=$PATH:$HOME/.local/bin
 
-      - name: Build and Push Docker Image
-        run: |
-          DOCKER_IMAGE_NAME=$(echo "${{ github.repository }}" | awk -F / '{print $2}')
-          docker build -t ghcr.io/${{ github.repository }}/${DOCKER_IMAGE_NAME}:latest .
-          docker push ghcr.io/${{ github.repository }}/${DOCKER_IMAGE_NAME}:latest
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Image
+        run: ./ci-scripts/build.sh
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+      - name: Set outputs
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
