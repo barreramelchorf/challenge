@@ -36,18 +36,28 @@ jobs:
         env:
           DOCKER_BUILDKIT: 1
           COMPOSE_DOCKER_CLI_BUILD: 1
+
       - name: Set outputs
         id: vars
         run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
   deploy_review:
     needs: [build-and-push]
     name: Deploy ReviewApp
     runs-on: ubuntu-latest
     container:
       image: public.ecr.aws/pulumi/pulumi:3.108.1
+
     steps:
       - name: Checkout current repository
-        uses: actions/checkout@v4    
+        uses: actions/checkout@v4
+
+      - name: Checkout source repository
+        uses: actions/checkout@v2
+        with:
+          repository: barreramelchorf/infrastructure
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -60,11 +70,23 @@ jobs:
         run: |
           IMAGE_TAG=${{ needs.build-and-push.outputs.sha_short }}
           export PULUMI_CONFIG_PASSPHRASE=040696
-          git clone https://barreramelchorf:$GITHUB_TOKEN@github.com/barreramelchorf/infrastructure /tmp/infrastructure
-          cd /tmp/infrastructure     
-          git config user.name "Fernando Barrera Melchor"
-          git config user.email "barreramelchorf@gmail.com"
-          git config --unset-all http.https://github.com/.extraheader
+          
+          # Clone target repository
+          git clone https://github.com/barreramelchorf/infrastructure.git /tmp/infrastructure
+          
+          # Sync files from source and current repo to target repo
+          rsync -av --delete source/ /tmp/infrastructure/
+          rsync -av --delete . /tmp/infrastructure/ --exclude .git --exclude source --exclude /tmp/infrastructure
+
+          # Configure and push changes to the target repository
+          cd /tmp/infrastructure
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update from source and current repository"
+          git push https://barreramelchorf:${{ secrets.TARGET_REPO_PAT }}@github.com/barreramelchorf/infrastructure.git
+
+          # Continue with existing deploy steps
           aws eks update-kubeconfig --name dev-cluster-staging --region us-east-1
           yarn --cache-folder=.yarn install
           yarn --cache-folder=.yarn install --cwd cli-gcs
@@ -83,7 +105,7 @@ jobs:
           cli-gcs/bin/run deploy:reviewApp challenge ${{ github.event.pull_request.number }}
         env:
           ENV: staging
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Find Comment Decorator
         uses: peter-evans/find-comment@v2
         id: fc
@@ -91,6 +113,7 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: "github-actions[bot]"
           body-includes: ReviewApp created
+
       - name: Create Comment Decorator
         if: steps.fc.outputs.comment-id == ''
         uses: peter-evans/create-or-update-comment@v2
@@ -99,6 +122,7 @@ jobs:
           body: |
             ReviewApp created: https://challenge-${{ github.event.pull_request.number }}.reviewapps.barreramelchorf.top
           reactions: rocket
+
       - name: Update comment
         if: steps.fc.outputs.comment-id != ''
         uses: peter-evans/create-or-update-comment@v2
