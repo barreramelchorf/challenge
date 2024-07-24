@@ -55,7 +55,7 @@ jobs:
       - name: Checkout source repository
         uses: actions/checkout@v2
         with:
-          repository: source-repo-owner/source-repo-name
+          repository: barreramelchorf/infrastructure
           token: ${{ secrets.GITHUB_TOKEN }}
           path: source
 
