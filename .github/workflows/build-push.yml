@@ -66,6 +66,8 @@ jobs:
           yarn --cache-folder=.yarn install
           yarn --cache-folder=.yarn install --cwd cli-gcs
           cd /tmp/infrastructure/applications/challenge
+          git config user.email "barreramelchorf@gmail.com"
+          git config user.name "Fernando Barrera"
           if [ ! -f "Pulumi.pr${{ github.event.pull_request.number }}.yaml" ]; then
             cp Pulumi.$ENV.yaml Pulumi.pr${{ github.event.pull_request.number }}.yaml
           fi
