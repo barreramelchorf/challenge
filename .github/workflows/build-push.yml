@@ -44,7 +44,7 @@ jobs:
     name: Deploy ReviewApp
     runs-on: ubuntu-latest
     container:
-      image: pulumi:3.108.1
+      image: public.ecr.aws/pulumi/pulumi:3.108.1
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
