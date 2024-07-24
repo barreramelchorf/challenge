@@ -14,6 +14,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: barreramelchorf/infrastructure
+          token: ${{ secrets.GH_TOKEN }}
+          path: infrastructure
+
       - name: Update PATH
         run: export PATH=$PATH:$HOME/.local/bin
 
