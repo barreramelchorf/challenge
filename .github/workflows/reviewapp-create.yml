@@ -48,7 +48,8 @@ jobs:
     steps:
       - name: Checkout current repository
         uses: actions/checkout@v4
-        
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}        
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -83,6 +84,7 @@ jobs:
           cli-gcs/bin/run deploy:reviewApp challenge ${{ github.event.pull_request.number }}
         env:
           ENV: staging
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Find Comment Decorator
         uses: peter-evans/find-comment@v2
         id: fc
